@@ -1,5 +1,6 @@
 # Tensorboard
 tb/*
+ckpt/*
 
 
 # Byte-compiled / optimized / DLL files

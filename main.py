@@ -31,7 +31,7 @@ def get_args():
 
     # Optimiser config
     parser.add_argument("--learning_rate", default=3e-3, type=float, help="learning rate")
-    parser.add_argument("--min_batch_size", default=32, type=int,
+    parser.add_argument("--min_batch_size", default=64, type=int,
                         help="minimum training batch size")
     parser.add_argument("--loss_v", default=0.5, type=float, help="value loss coefficient")
     parser.add_argument("--loss_entropy", default=0.01, type=float, help="entropy loss coefficient")
@@ -78,7 +78,7 @@ def add_brain_config(config, brain):
 
 if __name__ == "__main__":
 
-    checkpoint_path = "checkpoints/model.ckpt"
+    checkpoint_path = "ckpt/"
     load_sessions = False
 
     args = get_args()
@@ -86,8 +86,8 @@ if __name__ == "__main__":
     # Brain testing
     brain = Brain(config)
     config = add_brain_config(config, brain)
-    if tf.train.checkpoint_exists('checkpoints'):
-        brain.load_session("checkpoints/model.ckpt")
+    if tf.train.checkpoint_exists(checkpoint_path):
+        brain.load_session(checkpoint_path)
     else:
         print('INFO: No existing sessons.')
     print('------- Configuration -------')
