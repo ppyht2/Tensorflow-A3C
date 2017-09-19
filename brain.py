@@ -2,20 +2,22 @@ import tensorflow as tf
 import numpy as np
 import threading
 import time
-import random
 import os
 
 
 class Brain():
     """ A3C Class """
+    eps_debug_t = []
+    eps_debug_e = []
 
     def __init__(self, config):
         self.config = config
         self.train_queue = [[], [], [], [], []]  # s, a, r, s', s' terminal mask
         self.lock_queue = threading.Lock()
         self.build_graph()
+        self.init_time = time.time()
+        self.eps_end_time = self.init_time + config['EPS_TIME']
         self.frames = 0
-
         pass
 
     def build_graph(self):
@@ -28,13 +30,13 @@ class Brain():
             self.input_returns = tf.placeholder(tf.float32, [None, 1], name='input_returns')
 
         with tf.name_scope('hidden'):
-            self.hidden_layer = tf.layers.dense(
+            hidden_layer = tf.layers.dense(
                 self.input_states, 16, tf.nn.relu, name='hidden_layer')
-            self.output_layer = tf.layers.dense(
-                self.hidden_layer, self.config['ACTION_SPACE'], name='output_layer')
+            output_layer = tf.layers.dense(
+                hidden_layer, self.config['ACTION_SPACE'], name='output_layer')
         with tf.name_scope('outputs'):
-            self.logits = tf.nn.softmax(self.output_layer)
-            self.values = tf.layers.dense(self.output_layer, 1, name='value_layer')
+            self.logits = tf.nn.softmax(output_layer)
+            self.values = tf.layers.dense(output_layer, 1, name='value_layer')
 
         with tf.name_scope('loss'):
             log_prob = tf.log(tf.reduce_sum(self.logits * self.input_actions,
@@ -72,6 +74,9 @@ class Brain():
             tf.summary.histogram(e.name.replace(':', ''), e)
 
         self.merged_summary = tf.summary.merge_all()
+
+        # Saver
+        self.saver = tf.train.Saver()
 
     def _record_mean(self, v, name):
         mean_v = tf.reduce_mean(v, name=name)
@@ -122,12 +127,14 @@ class Brain():
                 self.train_queue[4].append(1.)
 
     def get_epsilon(self):
-
-        if (self.frames >= self.config['EPS_STEPS']):
+        t = time.time()
+        if (t >= self.eps_end_time):
             eps = self.config['EPS_END']
         else:
-            eps = self.config['EPS_START'] + self.frames * (self.config['EPS_END'] - self.config['EPS_START']) / \
-                self.config['EPS_STEPS']  # linearly interpolate
+            eps = self.config['EPS_START'] + (self.config['EPS_END'] - self.config['EPS_START']
+                                              ) * (t - self.init_time) / self.config['EPS_TIME']
+        Brain.eps_debug_e.append(eps)
+        Brain.eps_debug_t.append(t)
         return eps
 
     def decide(self, s):
@@ -135,13 +142,13 @@ class Brain():
         a = np.random.choice(self.config['ACTION_SPACE'], p=p[0, :])
         return a
 
-    def act(self, s):
-        eps = self.get_epsilon()
-        rand = random.random()
-        if rand < eps:
-            return random.randint(0, self.config['ACTION_SPACE'] - 1)
-        else:
-            return self.decide(s)
+    def save_session(self, path):
+        save_path = self.saver.save(self.sess, path)
+        print('BRAIN INFO: session saved in {}'.format(save_path))
+
+    def load_session(self, path):
+        print('BRAIN INFO: loading session from {}'.format(path))
+        self.saver.restore(self.sess, path)
 
 
 class Optimiser(threading.Thread):

@@ -2,6 +2,7 @@ import numpy as np
 import threading
 import gym
 import time  # Thread delay
+import random
 
 
 class Agent():
@@ -13,10 +14,17 @@ class Agent():
         self.G = 0.0  # Return
         self.decision_func = config['decision_func']
         self.push_to_brain = config['push_to_brain']
+        self.get_epsilon = config['get_epsilon']
         self.config = config
 
     def act(self, s):
-        return self.decision_func(s)
+        """ Act epsilon-greedly using epsilon from the brain"""
+        eps = self.get_epsilon()
+        rand = random.random()
+        if rand < eps:
+            return random.randint(0, self.config['ACTION_SPACE'] - 1)
+        else:
+            return self.decision_func(s)
 
     def get_sample(self, n):
         s, a, _, _ = self.memory[0]
@@ -54,6 +62,7 @@ class Agent():
 class Environment(threading.Thread):
     """ An class of the evnironment and agent"""
     env_id = 0
+    scores = []
 
     def __init__(self, config, render=False):
         threading.Thread.__init__(self)
@@ -86,6 +95,7 @@ class Environment(threading.Thread):
             R += r
 
             if done or self.stop_signal:
+                Environment.scores.append(R)
                 if self.render:
                     print("ENV_{} INFO: total reward this episode: {}".format(self.id, R))
                 break
