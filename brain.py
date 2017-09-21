@@ -74,25 +74,30 @@ class Brain():
 
         with tf.name_scope('outputs'):
             self.policy = tf.nn.softmax(logits)
-            self.values = tf.layers.dense(hidden_layer, 1, name='value_layer')
+            self.value = tf.layers.dense(hidden_layer, 1, name='value_layer')
 
         with tf.name_scope('loss'):
-            log_prob = tf.log(tf.reduce_sum(self.policy * self.input_actions,
-                                            axis=1, keep_dims=True) + 1e-6)
-            advantage = self.input_returns - self.values
-            loss_policy = - log_prob * tf.stop_gradient(advantage)  # maximize policy
-            loss_value = self.config['LOSS_V'] * tf.square(advantage)  # minimize value error
-            entropy = self.config['LOSS_ENTROPY'] * tf.reduce_sum(self.policy * tf.log(self.policy + 1e-6), axis=1,
-                                                                  keep_dims=True)  # maximize entropy (regularization)
-            loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
+            log_probs = tf.log(self.policy + 1e-6)
+            log_pi_a_given_s = tf.reduce_sum(log_probs * self.input_actions, axis=1, keep_dims=True)
+            advantage = tf.subtract(tf.stop_gradient(self.value),
+                                    self.input_returns, name='advantage')
+            # No importance for now
+            policy_loss = tf.identity(log_pi_a_given_s * advantage, name='policy_loss')
+            value_loss = self.config['LOSS_V'] * \
+                tf.squared_difference(self.value, self.input_returns, name='value_loss')
+            entropy = self.config['LOSS_ENTROPY'] * \
+                tf.reduce_sum(self.policy * log_probs, name='xentropy_loss', axis=1,
+                              keep_dims=True)
+
+            loss_total = tf.reduce_mean(policy_loss + value_loss + entropy)
             tf.summary.scalar('total_loss', loss_total)
-            self._record_mean(loss_policy, 'policy_loss')
+            self._record_mean(policy_loss, 'policy_loss')
             self._record_mean(entropy, 'entropy_loss')
-            self._record_mean(loss_value, 'value_loss')
+            self._record_mean(value_loss, 'value_loss')
 
         with tf.name_scope('train'):
             #optimizer = tf.train.RMSPropOptimizer(self.config['LEARNING_RATE'], decay=.99)
-            optimizer = tf.train.AdamOptimizer(self.config['LEARNING_RATE'])
+            optimizer = tf.train.AdamOptimizer(self.config['LEARNING_RATE'], epsilon=1e-3)
             self.train_op = optimizer.minimize(loss_total)
 
         self.writer = tf.summary.FileWriter(os.path.join('tb', time.strftime('%H%M%S')))
@@ -104,7 +109,7 @@ class Brain():
 
         with tf.name_scope('mics'):
             self._record_mean(self.input_returns, 'input_returns')
-            self._record_mean(self.values, 'values')
+            self._record_mean(self.value, 'values')
             self._record_mean(advantage, 'advantage')
             tf.summary.histogram('input_actions', self.input_actions)
 
@@ -141,7 +146,7 @@ class Brain():
             sp = np.stack(sp)
             sm = np.vstack(sm)
 
-            if False:
+            if self.config['TENSORBOARD']:
                 # TODO: write to tensorboard may belong somewhere else?
                 # Write to tensorboard
                 t = int((time.time() - self.init_time) * 100)
@@ -154,7 +159,7 @@ class Brain():
             if len(s) > 2 * self.config['MIN_BATCH_SIZE']:
                 print('BRAIN INFO {}: training a batch of size: {}'.format(t, len(s)))
 
-            v = self.sess.run(self.values, feed_dict={self.input_states: sp})
+            v = self.sess.run(self.value, feed_dict={self.input_states: sp})
             g = g + self.config['GAMMA_N'] * v * sm  # set v to 0 when sp is terminal
             self.sess.run(self.train_op, feed_dict={self.input_states: s,
                                                     self.input_actions: a,

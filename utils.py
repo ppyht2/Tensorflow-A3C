@@ -7,7 +7,10 @@ import pickle  # Saving files
 
 from collections import deque
 
-input_channels = 4
+
+frame_history = 4
+frame_channels = 3
+input_channels = frame_history * frame_channels
 input_height = 84
 input_width = 84
 

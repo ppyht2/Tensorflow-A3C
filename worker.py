@@ -86,7 +86,7 @@ class Environment(threading.Thread):
     env_id = 0  # Evnironment ID
     scores = []  # Global scores record for reporting. this may cause mem overflow
 
-    def __init__(self, config, render=False, debug=False):
+    def __init__(self, config, render=False):
         threading.Thread.__init__(self)
         self.stop_signal = False
         self.render = render
@@ -96,7 +96,7 @@ class Environment(threading.Thread):
         Environment.env_id += 1
         self.agent = Agent(config)
         self.episode_number = 0
-        self.debug = debug
+        self.debug = config['DEBUG']
         self.debug_log = []
 
     def run_episode(self):
@@ -130,6 +130,9 @@ class Environment(threading.Thread):
             if done or self.stop_signal:
                 Environment.scores.append(R)
                 self.episode_number += 1
+                # Static purge for now
+                Environment.scores = Environment.scores[-100:]
+
                 if self.debug:  # Save logs
                     # TODO: folder restructure
                     save_pickle(self.debug_log, os.path.join(

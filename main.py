@@ -21,7 +21,7 @@ def get_args():
     parser.add_argument("-g", "--gamma", default=0.99, type=float, help="discount rate")
 
     # Multi threading
-    parser.add_argument("-d", "--delay", default=0.001, type=float, help="thread delay")
+    parser.add_argument("--delay", default=0.001, type=float, help="thread delay")
     parser.add_argument("-n", "--threads", default=16, type=int, help="number of worker threads")
     parser.add_argument("-o", "--optimiser", default=2, type=int,
                         help="number of optimiser threads")
@@ -35,10 +35,11 @@ def get_args():
     parser.add_argument("--learning_rate", default=1e-3, type=float, help="learning rate")
     parser.add_argument("--min_batch_size", default=128, type=int,
                         help="minimum training batch size")
-    parser.add_argument("--loss_v", default=1, type=float, help="value loss coefficient")
+    parser.add_argument("--loss_v", default=0.5, type=float, help="value loss coefficient")
     parser.add_argument("--loss_entropy", default=0.01, type=float, help="entropy loss coefficient")
 
-    parser.add_argument("-b", "--debug", default=False, type=bool, help="debuging mode")
+    parser.add_argument("-d", "--debug", action='store_true', help="debuging mode")
+    parser.add_argument("-b", "--tensorboard", action='store_true', help="tensorboard mode")
     parser.add_argument("-f", "--freq", default=60, type=int, help="output frequency")
     parser.add_argument("-w", action='store_true', help="new session")
 
@@ -63,7 +64,8 @@ def get_config(args):
               'LOSS_ENTROPY': args.loss_entropy,
               'DEBUG': args.debug,
               'OUTPUT_FREQ': args.freq,
-              'NEW_SESSION': args.w
+              'NEW_SESSION': args.w,
+              'TENSORBOARD': args.tensorboard
               }
     e = gym.make(config['ENV_NAME'])
     config['STATE_SPACE'] = e.observation_space.shape[0]
@@ -88,7 +90,7 @@ if __name__ == "__main__":
     config = add_brain_config(config, brain)
 
     # File structure
-    checkpoint_path = os.path.join('sessions', config['ENV_NAME'], 'ckpt')
+    checkpoint_path = os.path.join('sessions', config['ENV_NAME'], 'ckpt/')
     if not os.path.isdir(checkpoint_path):
         os.makedirs(checkpoint_path)
         config['NEW_SESSION'] = True
