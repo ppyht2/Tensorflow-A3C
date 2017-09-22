@@ -8,12 +8,12 @@ from utils import save_pickle
 # Brain Settings
 INPUT_HEIGHT = 84
 INPUT_WIDTH = 84
-INPUT_CHANNELS = 4
-CONV_N_MAPS = [32, 64, 64]
-CONV_KERNEL_SIZES = [(8, 8), (4, 4), (3, 3)]
-CONV_STRIDES = [4, 2, 1]
-CONV_PADDINGS = ["SAME"] * 3
-CONV_ACTIVATION = [tf.nn.relu] * 3
+INPUT_CHANNELS = 3 * 4
+CONV_N_MAPS = [32, 32, 64, 64]
+CONV_KERNEL_SIZES = [(5, 5), (5, 5), (4, 4), (3, 3)]
+CONV_STRIDES = [1, 1, 1, 1]
+CONV_PADDINGS = ["SAME"] * 4
+CONV_ACTIVATION = [tf.nn.relu] * 4
 N_HIDDEN_IN = 64 * 11 * 11  # 84/8 arounded up
 N_HIDDEN = 512
 HIDDEN_ACTIVATION = tf.nn.relu
@@ -63,12 +63,12 @@ class Brain():
                                                       kernel_size=kernel_size, stride=stride,
                                                       padding=padding, activation_fn=activation,
                                                       weights_initializer=INITIALISER)
-            conv_layers.append(prev_layer)
-            last_conv_layer_flat = tf.reshape(prev_layer, shape=[-1, N_HIDDEN_IN])
-            hidden_layer = tf.contrib.layers.fully_connected(last_conv_layer_flat,
-                                                             num_outputs=N_HIDDEN,
-                                                             activation_fn=HIDDEN_ACTIVATION,
-                                                             weights_initializer=INITIALISER)
+                conv_layers.append(prev_layer)
+            flatten_layer = tf.contrib.layers.flatten(prev_layer)
+            hidden_layer = tf.layers.dense(flatten_layer,
+                                           units=N_HIDDEN,
+                                           activation=HIDDEN_ACTIVATION,
+                                           kernel_initializer=INITIALISER)
             logits = tf.layers.dense(
                 hidden_layer, self.config['ACTION_SPACE'], name='action_layer')
 

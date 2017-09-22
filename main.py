@@ -12,7 +12,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Mute missing instructions errors
 
 def get_args():
     parser = argparse.ArgumentParser(description="Get configurations for A3C")
-    parser.add_argument("-e", "--env", default="CartPole-v0",
+    parser.add_argument("-e", "--env", default="Breakout-v0",
                         type=str, help="name of the environment")
     parser.add_argument("-t", "--time", default=240, type=float, help="training run time")
 
