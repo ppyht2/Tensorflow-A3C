@@ -22,13 +22,13 @@ def get_args():
 
     # Multi threading
     parser.add_argument("--delay", default=0.001, type=float, help="thread delay")
-    parser.add_argument("-n", "--threads", default=16, type=int, help="number of worker threads")
+    parser.add_argument("-n", "--threads", default=32, type=int, help="number of worker threads")
     parser.add_argument("-o", "--optimiser", default=2, type=int,
                         help="number of optimiser threads")
 
     # Epsilon Greedy config
     parser.add_argument("--eps_start", default=0.4, type=float, help="epsilon starting")
-    parser.add_argument("--eps_end", default=0.1, type=float, help="epsilon ending")
+    parser.add_argument("--eps_end", default=0.05, type=float, help="epsilon ending")
     parser.add_argument("--eps_ratio", default=0.1, type=float, help="ratio of epsilon decay")
 
     # Optimiser config

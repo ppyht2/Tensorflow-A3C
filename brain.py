@@ -63,6 +63,7 @@ class Brain():
                                                       kernel_size=kernel_size, stride=stride,
                                                       padding=padding, activation_fn=activation,
                                                       weights_initializer=INITIALISER)
+                prev_layer = tf.contrib.layers.max_pool2d(prev_layer, 2, padding='SAME')
                 conv_layers.append(prev_layer)
             flatten_layer = tf.contrib.layers.flatten(prev_layer)
             hidden_layer = tf.layers.dense(flatten_layer,
