@@ -7,7 +7,9 @@ import pickle  # Saving files
 
 from collections import deque
 
-input_channels = 4
+frame_history = 4
+frame_channels = 3
+input_channels = frame_history * frame_channels
 input_height = 84
 input_width = 84
 
@@ -35,21 +37,20 @@ def down_sample(image):
 
 def preprocess(obs):
     """ Preprocess gym observation for learning
-    1. Convert into luminance
-    2. Down sample
-    3. Normalise
+    1. Down sample
+    2. Normalise
 
         Args:
           image: A numpy array of size H x W x C.
     """
-    return down_sample(get_luminance(obs)) / 255.0
+    return down_sample(obs) / 255.0
 
 
 def init_state(obs):
     """ Creats an input state based on a single observation
     """
     state = np.zeros([input_height, input_height, input_channels])
-    state[:, :, -1] = preprocess(obs)
+    state[:, :, -frame_channels:] = preprocess(obs)
     return state
 
 
@@ -57,8 +58,8 @@ def update_state(old_state, obs):
     """ Update the previouse input state using with a new observation
     """
     new_state = np.empty([input_height, input_width, input_channels])
-    new_state[:, :, : - 1] = old_state[:, :, 1:]
-    new_state[:, :,  - 1] = preprocess(obs)
+    new_state[:, :, : - frame_channels] = old_state[:, :, frame_channels:]
+    new_state[:, :,  - frame_channels:] = preprocess(obs)
     return new_state
 
 
@@ -75,13 +76,13 @@ def init_env(env_name):
     return env, obs, n_outputs
 
 
-def plot_state(state, show=True):
+def disp_state(state, show=True):
     """ Visualise an input state
     """
     fig = plt.figure(figsize=[18, 9])
-    for i in range(state.shape[-1]):
-        plt.subplot(1, state.shape[-1], i + 1)
-        plt.imshow(state[:, :, i], cmap='Greys')
+    for i in range(frame_history):
+        plt.subplot(1, frame_history, i + 1)
+        plt.imshow(state[:, :, i * frame_channels:(i + 1) * frame_channels])
     if show:
         plt.show()
     return fig

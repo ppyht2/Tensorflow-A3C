@@ -8,12 +8,12 @@ from utils import save_pickle
 # Brain Settings
 INPUT_HEIGHT = 84
 INPUT_WIDTH = 84
-INPUT_CHANNELS = 4
-CONV_N_MAPS = [32, 64, 64]
-CONV_KERNEL_SIZES = [(8, 8), (4, 4), (3, 3)]
-CONV_STRIDES = [4, 2, 1]
-CONV_PADDINGS = ["SAME"] * 3
-CONV_ACTIVATION = [tf.nn.relu] * 3
+INPUT_CHANNELS = 3 * 4
+CONV_N_MAPS = [32, 32, 64, 64]
+CONV_KERNEL_SIZES = [(5, 5), (5, 5), (4, 4), (3, 3)]
+CONV_STRIDES = [1, 1, 1, 1]
+CONV_PADDINGS = ["SAME"] * 4
+CONV_ACTIVATION = [tf.nn.relu] * 4
 N_HIDDEN_IN = 64 * 11 * 11  # 84/8 arounded up
 N_HIDDEN = 512
 HIDDEN_ACTIVATION = tf.nn.relu
@@ -63,36 +63,42 @@ class Brain():
                                                       kernel_size=kernel_size, stride=stride,
                                                       padding=padding, activation_fn=activation,
                                                       weights_initializer=INITIALISER)
-            conv_layers.append(prev_layer)
-            last_conv_layer_flat = tf.reshape(prev_layer, shape=[-1, N_HIDDEN_IN])
-            hidden_layer = tf.contrib.layers.fully_connected(last_conv_layer_flat,
-                                                             num_outputs=N_HIDDEN,
-                                                             activation_fn=HIDDEN_ACTIVATION,
-                                                             weights_initializer=INITIALISER)
+                prev_layer = tf.contrib.layers.max_pool2d(prev_layer, 2, padding='SAME')
+                conv_layers.append(prev_layer)
+            flatten_layer = tf.contrib.layers.flatten(prev_layer)
+            hidden_layer = tf.layers.dense(flatten_layer,
+                                           units=N_HIDDEN,
+                                           activation=HIDDEN_ACTIVATION,
+                                           kernel_initializer=INITIALISER)
             logits = tf.layers.dense(
                 hidden_layer, self.config['ACTION_SPACE'], name='action_layer')
 
         with tf.name_scope('outputs'):
             self.policy = tf.nn.softmax(logits)
-            self.values = tf.layers.dense(hidden_layer, 1, name='value_layer')
+            self.value = tf.layers.dense(hidden_layer, 1, name='value_layer')
 
         with tf.name_scope('loss'):
-            log_prob = tf.log(tf.reduce_sum(self.policy * self.input_actions,
-                                            axis=1, keep_dims=True) + 1e-6)
-            advantage = self.input_returns - self.values
-            loss_policy = - log_prob * tf.stop_gradient(advantage)  # maximize policy
-            loss_value = self.config['LOSS_V'] * tf.square(advantage)  # minimize value error
-            entropy = self.config['LOSS_ENTROPY'] * tf.reduce_sum(self.policy * tf.log(self.policy + 1e-6), axis=1,
-                                                                  keep_dims=True)  # maximize entropy (regularization)
-            loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
+            log_probs = tf.log(self.policy + 1e-6)
+            log_pi_a_given_s = tf.reduce_sum(log_probs * self.input_actions, axis=1, keep_dims=True)
+            advantage = tf.subtract(tf.stop_gradient(self.value),
+                                    self.input_returns, name='advantage')
+            # No importance for now
+            policy_loss = tf.identity(log_pi_a_given_s * advantage, name='policy_loss')
+            value_loss = self.config['LOSS_V'] * \
+                tf.squared_difference(self.value, self.input_returns, name='value_loss')
+            entropy = self.config['LOSS_ENTROPY'] * \
+                tf.reduce_sum(self.policy * log_probs, name='xentropy_loss', axis=1,
+                              keep_dims=True)
+
+            loss_total = tf.reduce_mean(policy_loss + value_loss + entropy)
             tf.summary.scalar('total_loss', loss_total)
-            self._record_mean(loss_policy, 'policy_loss')
+            self._record_mean(policy_loss, 'policy_loss')
             self._record_mean(entropy, 'entropy_loss')
-            self._record_mean(loss_value, 'value_loss')
+            self._record_mean(value_loss, 'value_loss')
 
         with tf.name_scope('train'):
             #optimizer = tf.train.RMSPropOptimizer(self.config['LEARNING_RATE'], decay=.99)
-            optimizer = tf.train.AdamOptimizer(self.config['LEARNING_RATE'])
+            optimizer = tf.train.AdamOptimizer(self.config['LEARNING_RATE'], epsilon=1e-3)
             self.train_op = optimizer.minimize(loss_total)
 
         self.writer = tf.summary.FileWriter(os.path.join('tb', time.strftime('%H%M%S')))
@@ -104,7 +110,7 @@ class Brain():
 
         with tf.name_scope('mics'):
             self._record_mean(self.input_returns, 'input_returns')
-            self._record_mean(self.values, 'values')
+            self._record_mean(self.value, 'values')
             self._record_mean(advantage, 'advantage')
             tf.summary.histogram('input_actions', self.input_actions)
 
@@ -141,7 +147,7 @@ class Brain():
             sp = np.stack(sp)
             sm = np.vstack(sm)
 
-            if False:
+            if self.config['TENSORBOARD']:
                 # TODO: write to tensorboard may belong somewhere else?
                 # Write to tensorboard
                 t = int((time.time() - self.init_time) * 100)
@@ -154,7 +160,7 @@ class Brain():
             if len(s) > 2 * self.config['MIN_BATCH_SIZE']:
                 print('BRAIN INFO {}: training a batch of size: {}'.format(t, len(s)))
 
-            v = self.sess.run(self.values, feed_dict={self.input_states: sp})
+            v = self.sess.run(self.value, feed_dict={self.input_states: sp})
             g = g + self.config['GAMMA_N'] * v * sm  # set v to 0 when sp is terminal
             self.sess.run(self.train_op, feed_dict={self.input_states: s,
                                                     self.input_actions: a,
