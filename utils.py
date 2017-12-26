@@ -175,6 +175,8 @@ def save_pickle(v, path):
 
 
 def load_pickle(path):
+    """ load pickle files into memory
+    """
     f = open(path, 'rb')
     v = pickle.load(f)
     f.close()
