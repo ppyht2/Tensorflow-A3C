@@ -6,11 +6,13 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Mute missing instructions errors
 
 
 def get_args():
     parser = argparse.ArgumentParser(description="Get configurations for A3C")
-    parser.add_argument("-e", "--env", default="CartPole-v0",
+    parser.add_argument("-e", "--env", default="Breakout-v0",
                         type=str, help="name of the environment")
     parser.add_argument("-t", "--time", default=240, type=float, help="training run time")
 
@@ -19,25 +21,27 @@ def get_args():
     parser.add_argument("-g", "--gamma", default=0.99, type=float, help="discount rate")
 
     # Multi threading
-    parser.add_argument("-d", "--delay", default=0.001, type=float, help="thread delay")
-    parser.add_argument("-n", "--threads", default=16, type=int, help="number of worker threads")
+    parser.add_argument("--delay", default=0.001, type=float, help="thread delay")
+    parser.add_argument("-n", "--threads", default=32, type=int, help="number of worker threads")
     parser.add_argument("-o", "--optimiser", default=2, type=int,
                         help="number of optimiser threads")
 
     # Epsilon Greedy config
     parser.add_argument("--eps_start", default=0.4, type=float, help="epsilon starting")
-    parser.add_argument("--eps_end", default=0.1, type=float, help="epsilon ending")
+    parser.add_argument("--eps_end", default=0.05, type=float, help="epsilon ending")
     parser.add_argument("--eps_ratio", default=0.1, type=float, help="ratio of epsilon decay")
 
     # Optimiser config
-    parser.add_argument("--learning_rate", default=3e-3, type=float, help="learning rate")
-    parser.add_argument("--min_batch_size", default=64, type=int,
+    parser.add_argument("--learning_rate", default=1e-3, type=float, help="learning rate")
+    parser.add_argument("--min_batch_size", default=128, type=int,
                         help="minimum training batch size")
     parser.add_argument("--loss_v", default=0.5, type=float, help="value loss coefficient")
     parser.add_argument("--loss_entropy", default=0.01, type=float, help="entropy loss coefficient")
 
-    parser.add_argument("-b", "--debug", default=False, type=bool, help="debuging mode")
-    parser.add_argument("-f", "--freq", default=15, type=int, help="output frequency")
+    parser.add_argument("-d", "--debug", action='store_true', help="debuging mode")
+    parser.add_argument("-b", "--tensorboard", action='store_true', help="tensorboard mode")
+    parser.add_argument("-f", "--freq", default=60, type=int, help="output frequency")
+    parser.add_argument("-w", action='store_true', help="new session")
 
     return parser.parse_args()
 
@@ -59,7 +63,9 @@ def get_config(args):
               'LOSS_V': args.loss_v,
               'LOSS_ENTROPY': args.loss_entropy,
               'DEBUG': args.debug,
-              'OUTPUT_FREQ': args.freq
+              'OUTPUT_FREQ': args.freq,
+              'NEW_SESSION': args.w,
+              'TENSORBOARD': args.tensorboard
               }
     e = gym.make(config['ENV_NAME'])
     config['STATE_SPACE'] = e.observation_space.shape[0]
@@ -77,19 +83,22 @@ def add_brain_config(config, brain):
 
 
 if __name__ == "__main__":
-
-    checkpoint_path = "ckpt/"
-    load_sessions = False
-
+    # Configs
     args = get_args()
     config = get_config(args)
-    # Brain testing
     brain = Brain(config)
     config = add_brain_config(config, brain)
-    if tf.train.checkpoint_exists(checkpoint_path):
+
+    # File structure
+    checkpoint_path = os.path.join('sessions', config['ENV_NAME'], 'ckpt/')
+    if not os.path.isdir(checkpoint_path):
+        os.makedirs(checkpoint_path)
+        config['NEW_SESSION'] = True
+    if tf.train.checkpoint_exists(checkpoint_path) and not config['NEW_SESSION']:
         brain.load_session(checkpoint_path)
     else:
         print('INFO: No existing sessons.')
+
     print('------- Configuration -------')
     for k in config:
         print('{}: {}'.format(k, config[k]))
@@ -108,8 +117,20 @@ if __name__ == "__main__":
     # Output loop
     while time.time() - brain.init_time <= config['TRAINING_TIME']:
         time.sleep(config['OUTPUT_FREQ'])
-        print('{:.2f} Performance: mean:{:.2f} max:{:.2f} min:{:.2f}'.format(time.time() -
-                                                                             brain.init_time, np.mean(Environment.scores[-100:]), np.max(Environment.scores[-50:]), np.min(Environment.scores[-50:])))
+        if len(Environment.scores) < 100:
+            continue
+        else:
+            scores = Environment.scores[-100:]
+        min_score = np.min(scores)
+        max_score = np.max(scores)
+        mean_scores = np.mean(scores)
+        t = (time.time() - brain.init_time)
+        p = t / config['TRAINING_TIME'] * 100
+        print('{:.2f} {:.2f}% mean:{:.2f} max:{:.2f} min:{:.2f}'.format(
+            t, p, mean_scores, max_score, min_score))
+
+        # Save the session
+        brain.save_session(checkpoint_path)
 
     for e in envs:
         e.stop()

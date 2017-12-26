@@ -1,6 +1,7 @@
 # Tensorboard
 tb/*
 ckpt/*
+sessions/*
 
 
 # Byte-compiled / optimized / DLL files
